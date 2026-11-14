@@ -1,0 +1,1036 @@
+{
+  "name": "Aurevia Practice OS - Incoming Reactivation Conversation",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Aurevia Practice OS Inbound Conversation Engine\n\nPrimary Webhook: POST /webhook/patient-reply\nLegacy Webhook: POST /webhook/patient-reactivation\nTest Webhook: POST /webhook-test/patient-reply\n\nIncoming WhatsApp message processor:\n1. Supports phone/From, message/text/Body, timestamp, message_id/MessageSid\n2. Immediate opt-out compliance (STOP, UNSUBSCRIBE, CANCEL, QUIT, etc.)\n3. Finds patient in Google Sheets CRM by normalized phone\n4. Deduplicates against message_id\n5. Evaluates intent with OpenAI using strict verified spa rules\n6. Escalates complaints/medical concerns to Human Queue sheet\n7. Delivers booking link for booking intent without false confirmation\n8. Sends WhatsApp reply & logs all messages to Conversations sheet\n9. Returns standardized JSON response contract"
+      },
+      "id": "note-overview",
+      "name": "NOTE - Workflow overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        40,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patient-reply",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-in",
+      "name": "01 - WhatsApp Webhook (patient-reply)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patient-reactivation",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-legacy",
+      "name": "01B - Legacy Webhook (patient-reactivation)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst rawPhone = String(body.phone ?? body.From ?? body.from ?? '').replace(/^whatsapp:/i, '').trim();\nconst phone = rawPhone.replace(/[^\\d+]/g, '').replace(/^\\+/, '');\nconst message = String(body.message ?? body.text ?? body.Body ?? body.body ?? '').trim();\nconst message_id = String(body.message_id ?? body.messageId ?? body.MessageSid ?? body.SmsMessageSid ?? '').trim();\nconst timestamp = body.timestamp ?? new Date().toISOString();\n\nconst optOutRegex = /^(stop|unsubscribe|cancel|quit|end|remove\\s*me|do\\s*not\\s*contact|dont\\s*contact|stop\\s*all)\\b/i;\nconst isOptOut = optOutRegex.test(message);\n\nreturn [{\n  json: {\n    valid: Boolean(phone && message),\n    phone,\n    message,\n    message_id,\n    timestamp,\n    is_opt_out: isOptOut\n  }\n}];"
+      },
+      "id": "validate-input",
+      "name": "02 - Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.valid}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "input-if",
+      "name": "03 - Input valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {success: false, error: 'Missing required phone or message', retryable: false}}];"
+      },
+      "id": "invalid-response",
+      "name": "03A - Invalid Input Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "get",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Patients"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "phone",
+              "lookupValue": "={{$node['02 - Validate Input'].json.phone}}"
+            }
+          ]
+        },
+        "options": {
+          "returnAll": false
+        }
+      },
+      "id": "get-patient",
+      "name": "04 - Get Patient by Phone",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        740,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const patient = $input.first()?.json ?? {};\nconst input = $('02 - Validate Input').first().json;\nif (!patient.patient_id) {\n  return [{json: {success: false, error: 'Patient not found in CRM for phone ' + input.phone, phone: input.phone}}];\n}\nreturn [{\n  json: {\n    ...input,\n    ...patient,\n    patient_row_number: patient.row_number ?? patient.rowNumber ?? patient.__rowNum ?? ''\n  }\n}];"
+      },
+      "id": "patient-context",
+      "name": "05 - Prepare Patient Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{Boolean($json.patient_id)}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "patient-found-if",
+      "name": "05A - Patient found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    success: false,\n    error: 'No CRM record matches phone: ' + $('02 - Validate Input').first().json.phone,\n    phone: $('02 - Validate Input').first().json.phone,\n    retryable: false\n  }\n}];"
+      },
+      "id": "unknown-patient-response",
+      "name": "05B - Unknown Patient Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "get",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Conversations"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "patient_id",
+              "lookupValue": "={{$node['05 - Prepare Patient Context'].json.patient_id}}"
+            }
+          ]
+        },
+        "options": {
+          "returnAll": true
+        }
+      },
+      "id": "get-history",
+      "name": "06 - Get Conversation History",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1380,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Offers"
+        },
+        "options": {}
+      },
+      "id": "get-offers",
+      "name": "07 - Get Offers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1600,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Config"
+        },
+        "options": {}
+      },
+      "id": "get-config",
+      "name": "08 - Get Config",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1820,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('02 - Validate Input').first().json;\nconst patient = $('05 - Prepare Patient Context').first().json;\nconst historyRows = $('06 - Get Conversation History').all().map(x => x.json);\nconst offers = $('07 - Get Offers').all().map(x => x.json).filter(x => String(x.active).toUpperCase() === 'YES' || x.active === true);\nconst configRows = $('08 - Get Config').all().map(x => x.json);\nconst config = Object.fromEntries(configRows.map(x => [x.config_key || x.key, x.config_value || x.value]));\nconst human_active = Boolean(patient.human_active === true || String(patient.human_active).toUpperCase() === 'YES' || patient.conversation_state === 'HUMAN_ACTIVE');\nconst duplicate = Boolean(input.message_id && historyRows.some(x => String(x.message_id ?? '') === input.message_id));\nreturn [{\n  json: {\n    ...input,\n    ...patient,\n    duplicate,\n    human_active,\n    history: historyRows.slice(-20),\n    offers,\n    config,\n            booking_url: String(config.booking_url || '').trim()\n  }\n}];"
+      },
+      "id": "build-context",
+      "name": "09 - Build AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.duplicate}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "duplicate-if",
+      "name": "10 - Duplicate message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2260,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {success: true, duplicate: true, message: 'Message ID already processed', patient_id: $json.patient_id}}];"
+      },
+      "id": "duplicate-response",
+      "name": "10A - Duplicate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "messageValues": [
+            {
+              "role": "system",
+              "content": "You are a warm, natural WhatsApp reactivation assistant for the practice. Use only the supplied patient, history, active offers, and config. Never invent prices, discounts, treatments, availability, policies, medical claims, or URLs. Never claim an appointment is booked. Sensitive, medical, complaint, uncertain, or staff-specific questions are HUMAN_REQUIRED. Reply like a thoughtful front-desk person who is continuing the conversation: acknowledge what the client said, answer the actual question, and ask at most one easy next question when useful. Do not use stiff phrases, internal routing labels, or generic greetings. Do not repeat the same sentence. Use the client's first name only when it feels natural. Keep replies under 60 words, use plain text, and use at most one friendly emoji only when it genuinely fits. Return JSON only: {\"intent\": \"...\", \"reply\": \"...\", \"next_state\": \"...\", \"human_reason\": \"...\"}. Allowed intents: INTERESTED, ASKING_ABOUT_OFFER, ASKING_PRICE, ASKING_ABOUT_TREATMENT, BOOKING_INTENT, NOT_INTERESTED, FOLLOW_UP_LATER, HUMAN_REQUIRED, OTHER. Allowed states: NEW, OUTREACH_SENT, WAITING_FOR_REPLY, INTERESTED, OFFER_PRESENTED, BOOKING_SENT, BOOKED, FOLLOW_UP_LATER, NOT_INTERESTED, OPTED_OUT, HUMAN_REQUIRED. BOOKING_INTENT => BOOKING_SENT and do not include the booking URL because it is added later. HUMAN_REQUIRED => HUMAN_REQUIRED. Opt-out phrases => NOT_INTERESTED."
+            },
+            {
+              "content": "=Patient: {{$json.first_name}} {{$json.last_name}} ({{$json.patient_id}})\nCurrent state: {{$json.conversation_state}}\nActive offers: {{JSON.stringify($json.offers)}}\nTrusted config: {{JSON.stringify($json.config)}}\nRecent history: {{JSON.stringify($json.history)}}\nNewest client message: {{$json.message}}"
+            }
+          ]
+        }
+      },
+      "id": "ai-engine",
+      "name": "11 - AI Conversation Engine",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('09 - Build AI Context').first().json;\n\n// Stop autonomous replies immediately if staff took over thread (human_active = true)\nif (source.human_active) {\n  return [{\n    json: {\n      ...source,\n      intent: 'HUMAN_ACTIVE',\n      next_state: 'HUMAN_ACTIVE',\n      reply: null,\n      human_reason: 'Staff takeover active (human_active = true)',\n      opt_out: source.opt_out ?? 'NO',\n      human_required: 'YES',\n      route: 'HUMAN_ACTIVE',\n      response_time_seconds: 0\n    }\n  }];\n}\n\n// Check if explicit opt-out was detected in Step 02\nif (source.is_opt_out) {\n  return [{\n    json: {\n      ...source,\n      intent: 'NOT_INTERESTED',\n      next_state: 'OPTED_OUT',\n      reply: 'Got it — I’ll stop promotional messages. You won’t hear from us again.',\n      human_reason: '',\n      opt_out: 'YES',\n      human_required: 'NO',\n      route: 'OPTOUT',\n      response_time_seconds: 0\n    }\n  }];\n}\n\nconst raw = $input.first().json.message?.content ?? $input.first().json.content ?? '{}';\nlet out;\ntry {\n  out = typeof raw === 'string' ? JSON.parse(raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()) : raw;\n} catch (e) {\n  out = {};\n}\n\nconst intents = ['INTERESTED','ASKING_ABOUT_OFFER','ASKING_PRICE','ASKING_ABOUT_TREATMENT','BOOKING_INTENT','NOT_INTERESTED','FOLLOW_UP_LATER','HUMAN_REQUIRED','OTHER'];\nconst states = ['NEW','OUTREACH_SENT','WAITING_FOR_REPLY','INTERESTED','OFFER_PRESENTED','BOOKING_SENT','BOOKED','FOLLOW_UP_LATER','NOT_INTERESTED','OPTED_OUT','HUMAN_REQUIRED'];\n\nconst intent = intents.includes(out.intent) ? out.intent : 'HUMAN_REQUIRED';\nconst next_state = intent === 'BOOKING_INTENT' ? 'BOOKING_SENT' : (states.includes(out.next_state) ? out.next_state : 'HUMAN_REQUIRED');\nconst fallback = 'I want to make sure you get the right guidance, so I’m passing this to our team. Someone will get back to you shortly.';\nconst reply = typeof out.reply === 'string' && out.reply.length <= 500 ? out.reply : fallback;\nconst opt_out = (intent === 'NOT_INTERESTED' && /stop|unsubscribe|cancel|quit|end|remove\\s*me|do\\s*not\\s*contact/i.test(source.message)) ? 'YES' : (source.opt_out ?? 'NO');\nconst route = opt_out === 'YES' ? 'OPTOUT' : (intent === 'BOOKING_INTENT' ? 'BOOKING' : (intent === 'HUMAN_REQUIRED' || reply === fallback ? 'HUMAN' : (intent === 'FOLLOW_UP_LATER' ? 'FOLLOW_UP' : 'NORMAL')));\n\nreturn [{\n  json: {\n    ...source,\n    intent,\n    next_state: opt_out === 'YES' ? 'OPTED_OUT' : next_state,\n    reply: opt_out === 'YES' ? 'Got it — I’ll stop promotional messages. You won’t hear from us again.' : reply,\n    human_reason: out.human_reason ?? '',\n    opt_out,\n    human_required: route === 'HUMAN' ? 'YES' : (source.human_required ?? 'NO'),\n    route,\n    response_time_seconds: 0\n  }\n}];"
+      },
+      "id": "validate-ai",
+      "name": "12 - Validate AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Conversations"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{$json.conversation_id || 'CONV-' + $json.patient_id}}",
+            "patient_id": "={{$json.patient_id}}",
+            "timestamp": "={{$json.timestamp}}",
+            "direction": "inbound",
+            "message": "={{$json.message}}",
+            "message_id": "={{$json.message_id}}",
+            "intent": "={{$json.intent}}",
+            "state_before": "={{$json.conversation_state}}",
+            "state_after": "={{$json.next_state}}",
+            "response_time_seconds": "={{$json.response_time_seconds}}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "log-inbound",
+      "name": "13 - Log Client Message",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2920,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Patients"
+        },
+        "rowNumber": "={{$('12 - Validate AI Output').first().json.patient_row_number}}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_state": "={{$('12 - Validate AI Output').first().json.next_state}}",
+            "last_message": "={{$('12 - Validate AI Output').first().json.message}}",
+            "last_intent": "={{$('12 - Validate AI Output').first().json.intent}}",
+            "booking_status": "={{$('12 - Validate AI Output').first().json.booking_status || 'NOT_BOOKED'}}",
+            "opt_out": "={{$('12 - Validate AI Output').first().json.opt_out}}",
+            "human_required": "={{$('12 - Validate AI Output').first().json.human_required}}",
+            "human_reason": "={{$('12 - Validate AI Output').first().json.human_reason}}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "update-patient",
+      "name": "14 - Update Patient State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3140,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {...$('12 - Validate AI Output').first().json}}];"
+      },
+      "id": "restore-route-context",
+      "name": "14A - Restore Route Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "BOOKING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "BOOKING"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "HUMAN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "HUMAN"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "OPTOUT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "OPTOUT"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "FOLLOW_UP",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "FOLLOW_UP"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.route}}",
+                    "rightValue": "NORMAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "NORMAL"
+            }
+          ]
+        }
+      },
+      "id": "route-intent",
+      "name": "15 - Route Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        3580,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {...$json, reply: `${$json.reply} Here is our official booking link: ${$json.booking_url}`.trim(), booking_status: 'NOT_BOOKED'}}];"
+      },
+      "id": "booking-response",
+      "name": "16A - Booking Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3820,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Human Queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "queue_id": "={{'HQ-' + $json.patient_id + '-' + Date.now()}}",
+            "patient_id": "={{$json.patient_id}}",
+            "conversation_id": "={{$json.conversation_id || 'CONV-' + $json.patient_id}}",
+            "name": "={{$json.first_name + ' ' + $json.last_name}}",
+            "phone": "={{$json.phone}}",
+            "reason": "={{$json.human_reason || 'Sensitive or unsupported question'}}",
+            "last_message": "={{$json.message}}",
+            "intent": "HUMAN_REQUIRED",
+            "state": "HUMAN_REQUIRED",
+            "status": "OPEN",
+            "created_at": "={{$json.timestamp}}",
+            "resolved_at": "",
+            "assigned_to": ""
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "human-queue",
+      "name": "16B - Create Human Queue Case",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3820,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {...$('12 - Validate AI Output').first().json, reply: 'I want to make sure you get the right guidance, so I’m passing this to our team. Someone will get back to you shortly.'}}];"
+      },
+      "id": "human-response",
+      "name": "16C - Safe Human Handoff Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4040,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: {...$('12 - Validate AI Output').first().json, reply: $json.route === 'OPTOUT' ? 'Got it — I’ll stop promotional messages. You won’t hear from us again.' : $json.reply}}];"
+      },
+      "id": "standard-response",
+      "name": "16D - Prepare Standard Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3820,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Conversations"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{$json.conversation_id || 'CONV-' + $json.patient_id}}",
+            "patient_id": "={{$json.patient_id}}",
+            "timestamp": "={{new Date().toISOString()}}",
+            "direction": "outbound",
+            "message": "={{$json.reply}}",
+            "message_id": "",
+            "intent": "={{$json.intent}}",
+            "state_before": "={{$json.conversation_state}}",
+            "state_after": "={{$json.next_state}}",
+            "response_time_seconds": "={{$json.response_time_seconds}}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "log-outbound",
+      "name": "17 - Log AI Response",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        4260,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('12 - Validate AI Output').first().json;\nconst bookingReply = source.booking_url ? `${source.reply} You can use this link when you’re ready: ${source.booking_url}` : source.reply;\nconst reply = source.route === 'HUMAN'\n  ? 'I want to make sure you get the right guidance, so I’m passing this to our team. Someone will get back to you shortly.'\n  : (source.route === 'OPTOUT'\n    ? 'Got it — I’ll stop promotional messages. You won’t hear from us again.'\n    : (source.route === 'BOOKING' ? bookingReply : source.reply));\nreturn [{json: {...source, reply}}];"
+      },
+      "id": "restore-send-context",
+      "name": "17A - Restore Send Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "from": "whatsapp:YOUR_TWILIO_NUMBER",
+        "to": "=whatsapp:{{$json.phone}}",
+        "message": "={{$json.reply}}"
+      },
+      "id": "send-whatsapp",
+      "name": "18 - WhatsApp Provider Send",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        4700,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $input.first()?.json ?? $('17A - Restore Send Context').first().json;\nreturn [{\n  json: {\n    success: true,\n    patient_id: source.patient_id,\n    phone: source.phone,\n    intent: source.intent,\n    state: source.next_state,\n    reply: source.reply,\n    human_required: source.human_required === 'YES' || source.human_required === true,\n    opt_out: source.opt_out === 'YES' || source.opt_out === true\n  }\n}];"
+      },
+      "id": "success-response",
+      "name": "19 - Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4920,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "01 - WhatsApp Webhook (patient-reply)": {
+      "main": [
+        [
+          {
+            "node": "02 - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01B - Legacy Webhook (patient-reactivation)": {
+      "main": [
+        [
+          {
+            "node": "02 - Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 - Validate Input": {
+      "main": [
+        [
+          {
+            "node": "03 - Input valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 - Input valid?": {
+      "main": [
+        [
+          {
+            "node": "04 - Get Patient by Phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "03A - Invalid Input Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 - Get Patient by Phone": {
+      "main": [
+        [
+          {
+            "node": "05 - Prepare Patient Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 - Prepare Patient Context": {
+      "main": [
+        [
+          {
+            "node": "05A - Patient found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05A - Patient found?": {
+      "main": [
+        [
+          {
+            "node": "06 - Get Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "05B - Unknown Patient Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 - Get Conversation History": {
+      "main": [
+        [
+          {
+            "node": "07 - Get Offers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 - Get Offers": {
+      "main": [
+        [
+          {
+            "node": "08 - Get Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 - Get Config": {
+      "main": [
+        [
+          {
+            "node": "09 - Build AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 - Build AI Context": {
+      "main": [
+        [
+          {
+            "node": "10 - Duplicate message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 - Duplicate message?": {
+      "main": [
+        [
+          {
+            "node": "10A - Duplicate Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "11 - AI Conversation Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11 - AI Conversation Engine": {
+      "main": [
+        [
+          {
+            "node": "12 - Validate AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 - Validate AI Output": {
+      "main": [
+        [
+          {
+            "node": "13 - Log Client Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13 - Log Client Message": {
+      "main": [
+        [
+          {
+            "node": "14 - Update Patient State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14 - Update Patient State": {
+      "main": [
+        [
+          {
+            "node": "14A - Restore Route Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14A - Restore Route Context": {
+      "main": [
+        [
+          {
+            "node": "15 - Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15 - Route Intent": {
+      "main": [
+        [
+          {
+            "node": "16A - Booking Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "16B - Create Human Queue Case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "16D - Prepare Standard Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "16D - Prepare Standard Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "16D - Prepare Standard Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16A - Booking Response": {
+      "main": [
+        [
+          {
+            "node": "17 - Log AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16B - Create Human Queue Case": {
+      "main": [
+        [
+          {
+            "node": "16C - Safe Human Handoff Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16C - Safe Human Handoff Response": {
+      "main": [
+        [
+          {
+            "node": "17 - Log AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16D - Prepare Standard Response": {
+      "main": [
+        [
+          {
+            "node": "17 - Log AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17 - Log AI Response": {
+      "main": [
+        [
+          {
+            "node": "17A - Restore Send Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17A - Restore Send Context": {
+      "main": [
+        [
+          {
+            "node": "18 - WhatsApp Provider Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18 - WhatsApp Provider Send": {
+      "main": [
+        [
+          {
+            "node": "19 - Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "maya-spa-inbound-v3",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

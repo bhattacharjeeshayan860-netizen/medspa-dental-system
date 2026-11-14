@@ -1,0 +1,30 @@
+node_modules/
+dist/
+coverage/
+.vite/
+
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+*.log
+.DS_Store
+Thumbs.db
+
+# Local agent tooling and scratch files are not part of the product.
+.agents/
+skills-lock.json
+test_python.swift
+*.bak
+
+# One-off editing and local preview scripts.
+/scripts/apply_main_improvements.cjs
+/scripts/capture_screenshots.js
+/scripts/inject_*.js
+/scripts/inspect_new_workflows.cjs
+/scripts/probe_preview.js
+/scripts/prepare_for_n8n_import.js
+/scripts/update_client.js
+/scripts/update_workflow.js
+/scripts/upgrade_ui_motion.js

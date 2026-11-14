@@ -1,0 +1,745 @@
+{
+  "name": "AI Reactivation — Outgoing Conversation",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 890285130,
+          "mode": "list",
+          "cachedResultName": "Patients",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=890285130"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "reactivation_eligible",
+              "lookupValue": "YES"
+            },
+            {
+              "lookupColumn": "preferred_channel",
+              "lookupValue": "WhatsApp"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        176,
+        160
+      ],
+      "id": "031671f8-a0b6-48f2-b73d-89a971ccd7a0",
+      "name": "Get the customers",
+      "notes": "Reads eligible Patients only. Confirm row 1 headers and a unique patient_id before enabling outbound sends. This workflow is deterministic and does not use Gemini.",
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const p = item.json;\n\n  // Normalise the Indian phone number\n  const digits = String(p.phone || \"\").replace(/\\D/g, \"\");\n\n  let mobile;\n\n  if (digits.length === 10) {\n    mobile = digits;\n  } else if (digits.length === 12 && digits.startsWith(\"91\")) {\n    mobile = digits.slice(2);\n  } else {\n    throw new Error(`Invalid Indian phone number for patient ${p.patient_id}`);\n  }\n\n  const phone = `+91${mobile}`;\n\n  // Personalise the message\n  const firstName = String(p.first_name || \"\").trim() || \"there\";\n  const treatment = String(p.last_treatment || \"\").trim();\n\n  let message;\n\n  if (treatment) {\n    message = `Hi ${firstName} 👋\n\nHope you're doing well! 😊 It's been a little while since your ${treatment} visit at Sample Practice.\n\nWould you like to check out some convenient appointment slots?`;\n  } else {\n    message = `Hi ${firstName} 👋\n\nHope you're doing well! 😊 It's been a little while since your last visit to Sample Practice.\n\nWould you like to check out some convenient appointment slots?`;\n  }\n\n  return {\n    json: {\n      patient_id: p.patient_id,\n      phone,\n      first_name: firstName,\n      message\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        64
+      ],
+      "id": "3836d037-d85a-4c5b-b747-e299d7bc8285",
+      "name": "Prepare the response"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "=1322251527641707",
+        "recipientPhoneNumber": "={{ $json.phone }}",
+        "textBody": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        848,
+        64
+      ],
+      "id": "17e88a15-dd1c-4966-a120-4212ef1084d9",
+      "name": "Send message",
+      "notes": "External WhatsApp delivery requires the operator's credential and approved sender configuration. A successful node execution is not proof of carrier delivery; inspect the provider result.",
+      "webhookId": "a64abc38-084e-4d4c-a98e-89759cc317e3",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "J4fzriNm6qxSDgIQ",
+          "name": "WhatsApp account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b3ccf3de-3a8f-4d80-a5f4-c19097a3483b",
+              "leftValue": "={{ $json.conversation_state }}",
+              "rightValue": "OPTED_OUT",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "1f5a0730-fbb7-43c7-8b82-3dee5dd983fd",
+              "leftValue": "={{ $json.opt_out }}",
+              "rightValue": "NOT_INTRESTED",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        160
+      ],
+      "id": "70e38988-fa94-4641-9f85-7c9d1cd6fdfc",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 890285130,
+          "mode": "list",
+          "cachedResultName": "Patients",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=890285130"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "patient_id": "={{ $('Prepare the response').first().json.patient_id }}",
+            "conversation_state": "CONTACTED",
+            "updated_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "patient_id"
+          ],
+          "schema": [
+            {
+              "id": "patient_id",
+              "displayName": "patient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_name",
+              "displayName": "last_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_treatment",
+              "displayName": "last_treatment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_visit",
+              "displayName": "last_visit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "days_inactive",
+              "displayName": "days_inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "preferred_channel",
+              "displayName": "preferred_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "reactivation_eligible",
+              "displayName": "reactivation_eligible",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "conversation_state",
+              "displayName": "conversation_state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_message",
+              "displayName": "last_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_intent",
+              "displayName": "last_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_status",
+              "displayName": "booking_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "opt_out",
+              "displayName": "opt_out",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1072,
+        -32
+      ],
+      "id": "d60b0cc2-3d42-4fe2-8098-8048064b4421",
+      "name": "Update records to Contacted",
+      "notes": "Updates only the matched patient_id. Keep delivery state truthful: CONTACTED means the send node completed, not that the patient read the message.",
+      "retryOnFail": true,
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const data = item.json;\n\n  const failed = !!data.error;\n\n  return {\n    json: {\n      ...data,\n      delivery_status: failed ? \"SEND_FAILED\" : \"CONTACTED\"\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        160
+      ],
+      "id": "b4e30192-8bbd-479a-bfc7-7ec8db7dd069",
+      "name": "Prepare Delivery Status",
+      "notes": "Preserves provider errors as SEND_FAILED; do not convert failures into CONTACTED."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 890285130,
+          "mode": "list",
+          "cachedResultName": "Patients",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=890285130"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "patient_id": "={{ $json.patient_id }}",
+            "conversation_state": "={{ $json.delivery_status}}"
+          },
+          "matchingColumns": [
+            "patient_id"
+          ],
+          "schema": [
+            {
+              "id": "patient_id",
+              "displayName": "patient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_name",
+              "displayName": "last_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_treatment",
+              "displayName": "last_treatment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_visit",
+              "displayName": "last_visit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "days_inactive",
+              "displayName": "days_inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "preferred_channel",
+              "displayName": "preferred_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "reactivation_eligible",
+              "displayName": "reactivation_eligible",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "conversation_state",
+              "displayName": "conversation_state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_message",
+              "displayName": "last_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_intent",
+              "displayName": "last_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_status",
+              "displayName": "booking_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "opt_out",
+              "displayName": "opt_out",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1296,
+        160
+      ],
+      "id": "a021dee6-7290-4e38-a577-55a40c5febb8",
+      "name": "Update if failed",
+      "retryOnFail": true,
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patient-outbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        160
+      ],
+      "id": "2bb0c7b1-3a62-4d55-9db1-41beed183a2f",
+      "name": "Webhook",
+      "webhookId": "a68d148c-3592-496c-8fee-1b0301508050"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        624,
+        256
+      ],
+      "id": "4986efad-5ce2-4ded-9773-da2689dc5404",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1296,
+        -32
+      ],
+      "id": "7f3bd9b6-e9fd-4c00-b845-1e02b842e0ef",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1520,
+        160
+      ],
+      "id": "7b9a2df5-034a-41af-9351-8237b5d63a59",
+      "name": "Respond to Webhook2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get the customers": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare the response": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Prepare the response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message": {
+      "main": [
+        [
+          {
+            "node": "Update records to Contacted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Delivery Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delivery Status": {
+      "main": [
+        [
+          {
+            "node": "Update if failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get the customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update records to Contacted": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update if failed": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "57bdcc39-dcd8-4bbc-9984-c6d1954f0ad3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "tmRESQLvHB6I4580",
+  "tags": []
+}

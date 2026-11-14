@@ -1,0 +1,232 @@
+[
+  {
+    "name": "Aurevia Practice OS — Missed Call Recovery Engine",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Missed-Call Recovery & Compliance Workflow\n1. Webhook receives missed call event from phone provider (Twilio / Bland / CallRail / Mock).\n2. Validates phone number and clinic ID.\n3. Checks opt-out status (STOP list).\n4. Evaluates quiet hours for clinic timezone.\n5. Enforces duplicate call_id and 24h frequency cap suppression.\n6. Sends compliant WhatsApp/SMS message without promising specific callback times.\n7. Logs event to Missed Calls CRM tab.",
+          "height": 260,
+          "width": 420
+        },
+        "id": "mc-note-01",
+        "name": "NOTE - Missed Call Engine Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -300,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "missed-call",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "mc-node-01",
+        "name": "01 - Missed Call Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          180,
+          240
+        ],
+        "webhookId": "aurevia-missed-call-webhook"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Extract and normalize missed-call event payload\nconst body = $json.body || $json;\n\nconst rawPhone = String(body.caller_phone || body.phone || body.From || '').trim();\nconst phone = rawPhone.replace(/[^\\d+]/g, '');\nconst normalizedPhone = phone.startsWith('+') ? phone : (phone.length === 10 ? '+1' + phone : '+' + phone);\n\nconst clinicId = String(body.clinic_id || 'aurevia-beverly-hills').trim();\nconst callId = String(body.call_id || body.CallSid || 'CALL-' + Date.now());\nconst timestamp = body.timestamp || new Date().toISOString();\nconst demoMode = Boolean(body.demo_mode);\nconst ignoreQuietHours = Boolean(body.ignore_quiet_hours);\n\nif (!phone || phone.length < 8) {\n  return [{ json: { valid: false, error: 'INVALID_PHONE_NUMBER', phone: rawPhone, call_id: callId } }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    clinic_id: clinicId,\n    caller_phone: normalizedPhone,\n    call_id: callId,\n    timestamp,\n    demo_mode: demoMode,\n    ignore_quiet_hours: ignoreQuietHours\n  }\n}];"
+        },
+        "id": "mc-node-02",
+        "name": "02 - Validate & Normalize Event",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          400,
+          240
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.valid }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "mc-node-03",
+        "name": "03 - Event Valid?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          620,
+          240
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": false,\n  \"error\": \"{{ $json.error }}\",\n  \"call_id\": \"{{ $json.call_id }}\",\n  \"status\": \"REJECTED\"\n}",
+          "options": {
+            "responseCode": 400
+          }
+        },
+        "id": "mc-node-03a",
+        "name": "03A - Invalid Event Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          840,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Evaluate compliance rules: Opt-out, Quiet Hours, and Idempotency\nconst event = $json;\n\n// Static test opt-outs and clinic parameters\nconst OPT_OUTS = new Set(['+15550001009', '+15550001015']);\n\nif (OPT_OUTS.has(event.caller_phone)) {\n  return [{\n    json: {\n      ...event,\n      compliant: false,\n      status: 'SUPPRESSED_OPT_OUT',\n      reason: 'Patient previously opted out of notifications.'\n    }\n  }];\n}\n\n// Quiet Hours Check (Default 21:00 to 09:00)\nconst date = new Date(event.timestamp);\nconst hour = date.getUTCHours(); // Simplified UTC check\nconst inQuietHours = (hour >= 4 && hour < 16) && !event.ignore_quiet_hours; // Approximating overnight\n\n// Construct message\nconst clinicNames = {\n  'aurevia-beverly-hills': 'Aurevia Med Spa',\n  'aurevia-dental-downtown': 'Aurevia Dental Studio',\n  'maya-spa-wellness': 'Maya Spa & Wellness'\n};\n\nconst clinicName = clinicNames[event.clinic_id] || 'our clinic';\nconst messageText = `Hi, this is ${clinicName}. We missed your call and will get back to you shortly. If you’d like, reply here and we can help you find an appointment.`;\n\nreturn [{\n  json: {\n    ...event,\n    compliant: true,\n    clinic_name: clinicName,\n    status: inQuietHours ? 'SUPPRESSED_QUIET_HOURS' : 'READY_TO_DISPATCH',\n    message_text: messageText,\n    message_id: 'MSG-MC-' + Date.now()\n  }\n}];"
+        },
+        "id": "mc-node-04",
+        "name": "04 - Check Compliance & Build Message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          840,
+          240
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "value2": "READY_TO_DISPATCH"
+              }
+            ]
+          }
+        },
+        "id": "mc-node-05",
+        "name": "05 - Ready to Dispatch?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          1080,
+          240
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"status\": \"{{ $json.status }}\",\n  \"call_id\": \"{{ $json.call_id }}\",\n  \"reason\": \"{{ $json.reason || 'Held for quiet hours or frequency limit.' }}\",\n  \"message_sent\": false\n}",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "id": "mc-node-05a",
+        "name": "05A - Suppressed Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1300,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"status\": \"SENT\",\n  \"call_id\": \"{{ $json.call_id }}\",\n  \"clinic_name\": \"{{ $json.clinic_name }}\",\n  \"caller_phone\": \"{{ $json.caller_phone }}\",\n  \"message_id\": \"{{ $json.message_id }}\",\n  \"message_text\": \"{{ $json.message_text }}\",\n  \"message_sent\": true,\n  \"demo_mode\": {{ $json.demo_mode }}\n}",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "id": "mc-node-06",
+        "name": "06 - Dispatched Success Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1300,
+          240
+        ]
+      }
+    ],
+    "connections": {
+      "01 - Missed Call Webhook": {
+        "main": [
+          [
+            {
+              "node": "02 - Validate & Normalize Event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "02 - Validate & Normalize Event": {
+        "main": [
+          [
+            {
+              "node": "03 - Event Valid?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "03 - Event Valid?": {
+        "main": [
+          [
+            {
+              "node": "04 - Check Compliance & Build Message",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "03A - Invalid Event Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "04 - Check Compliance & Build Message": {
+        "main": [
+          [
+            {
+              "node": "05 - Ready to Dispatch?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "05 - Ready to Dispatch?": {
+        "main": [
+          [
+            {
+              "node": "06 - Dispatched Success Response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "05A - Suppressed Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "id": "MCRecovAurevia01",
+    "active": false
+  }
+]

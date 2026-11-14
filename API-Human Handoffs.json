@@ -1,0 +1,138 @@
+{
+  "name": "API-Human Handoffs",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "handoffs",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "865c36eb-9c52-4dc9-a02e-27282d54d214",
+      "name": "Webhook",
+      "webhookId": "8c3b3322-05da-422c-831c-2564c0641224"
+    },
+    {
+      "parameters": {
+        "jsCode": "const handoffs = $input.all().map(item => item.json);\n\nreturn [\n  {\n    json: {\n      success: true,\n      handoffs: handoffs,\n      total_handoffs: handoffs.length\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "18fece31-d0c0-42ee-a7ae-0ed92ad50fe7",
+      "name": "Build Handoff Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "86861619-80d7-410d-a42d-4e75e87c0faa",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 300272866,
+          "mode": "list",
+          "cachedResultName": "Human Handoffs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=300272866"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "OPEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "4258cc5c-936a-43b9-903c-b4926c752d72",
+      "name": "Get rows for Handoffs",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get rows for Handoffs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Handoff Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get rows for Handoffs": {
+      "main": [
+        [
+          {
+            "node": "Build Handoff Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2760026a-e03f-48e4-b6d4-e2bb25cfd9a5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "kkLepzSWOl8smUaz",
+  "tags": []
+}

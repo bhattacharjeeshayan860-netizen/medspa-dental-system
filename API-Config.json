@@ -1,0 +1,130 @@
+{
+  "name": "API-Config",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "config",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "40525062-330c-44b5-aa27-828db8d57b67",
+      "name": "Webhook",
+      "webhookId": "345815bf-e379-4a63-8d01-2543cc8287b3"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "0ebc3938-8cb2-4f98-8fce-4366ff813346",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\n\nconst config = {};\n\nfor (const row of rows) {\n  const key = String(row.key || \"\").trim();\n\n  if (!key) {\n    continue;\n  }\n\n  config[key] = row.value ?? \"\";\n}\n\nreturn [\n  {\n    json: {\n      success: true,\n      config\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "1be9e78d-8796-4217-bf80-6d72f889e618",
+      "name": "Prepare Config Response"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 671612678,
+          "mode": "list",
+          "cachedResultName": "Config",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=671612678"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "e2b4c319-f1e6-4620-914f-d531655b68df",
+      "name": "Get Config Rows",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Config Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Config Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Config Rows": {
+      "main": [
+        [
+          {
+            "node": "Prepare Config Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a746f9fb-82b0-47a1-8ba0-de878337cf25",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "8CiGO3lm1QDRwdE8",
+  "tags": []
+}

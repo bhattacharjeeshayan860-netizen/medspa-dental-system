@@ -1,0 +1,80 @@
+[
+  {
+    "name": "Aurevia Practice OS API - Dashboard",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"dashboard","responseMode":"responseNode","options":{}},"id":"api-dashboard-webhook","name":"API Dashboard Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Patients"},"options":{}},"id":"api-dashboard-patients","name":"Get Patients","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[480,220]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Human Handoffs"},"options":{}},"id":"api-dashboard-handoffs","name":"Get Human Handoffs","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[700,220]},
+      {"parameters":{"jsCode":"const patients = $('Get Patients').all().map(item => item.json);\nconst handoffs = $('Get Human Handoffs').all().map(item => item.json);\nconst activeStates = ['OUTREACH_SENT','WAITING_FOR_REPLY','INTERESTED','OFFER_PRESENTED','BOOKING_SENT','HUMAN_REQUIRED','FOLLOW_UP_LATER'];\nconst yes = value => String(value ?? '').trim().toUpperCase() === 'YES';\nreturn [{json: {success: true, stats: {total_clients: patients.length, eligible_clients: patients.filter(row => yes(row.reactivation_eligible)).length, active_conversations: patients.filter(row => activeStates.includes(String(row.conversation_state ?? '').trim())).length, booking_links_sent: patients.filter(row => String(row.booking_status ?? '').trim().toUpperCase() === 'BOOKING_SENT').length, booked: patients.filter(row => String(row.booking_status ?? '').trim().toUpperCase() === 'BOOKED').length, human_handoffs: handoffs.filter(row => String(row.status ?? '').trim().toUpperCase() !== 'RESOLVED').length}}}];"},"id":"api-dashboard-transform","name":"Build Dashboard JSON","type":"n8n-nodes-base.code","typeVersion":2,"position":[940,220]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json }}","options":{}},"id":"api-dashboard-response","name":"Respond Dashboard","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[1180,220]}
+    ],
+    "connections":{"API Dashboard Webhook":{"main":[[{"node":"Get Patients","type":"main","index":0}]]},"Get Patients":{"main":[[{"node":"Get Human Handoffs","type":"main","index":0}]]},"Get Human Handoffs":{"main":[[{"node":"Build Dashboard JSON","type":"main","index":0}]]},"Build Dashboard JSON":{"main":[[{"node":"Respond Dashboard","type":"main","index":0}]]}},
+    "active":false,"settings":{},"versionId":"maya-api-dashboard-v1","meta":{}
+  },
+  {
+    "name": "Aurevia Practice OS API - Clients",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"clients","responseMode":"responseNode","options":{}},"id":"api-clients-webhook","name":"API Clients Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Patients"},"options":{}},"id":"api-clients-sheet","name":"Get Patients","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[500,300]},
+      {"parameters":{"jsCode":"return [{json: $input.all().map(item => item.json)}];"},"id":"api-clients-transform","name":"Return Patient Rows","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json }}","options":{}},"id":"api-clients-response","name":"Respond Clients","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[980,300]}
+    ],
+    "connections":{"API Clients Webhook":{"main":[[{"node":"Get Patients","type":"main","index":0}]]},"Get Patients":{"main":[[{"node":"Return Patient Rows","type":"main","index":0}]]},"Return Patient Rows":{"main":[[{"node":"Respond Clients","type":"main","index":0}]]}},
+    "active":false,"settings":{},"versionId":"maya-api-clients-v1","meta":{}
+  },
+  {
+    "name": "Aurevia Practice OS API - Client Detail",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"client","responseMode":"responseNode","options":{}},"id":"api-client-webhook","name":"API Client Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Patients"},"options":{}},"id":"api-client-sheet","name":"Get Patients","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[500,300]},
+      {"parameters":{"jsCode":"const patientId = String($('API Client Webhook').first().json.query?.patient_id ?? '').trim();\nconst patient = $input.all().map(item => item.json).find(row => String(row.patient_id ?? '').trim() === patientId);\nreturn patient ? [{json: patient}] : [{json: {error: 'Patient not found', _httpStatus: 404}}];"},"id":"api-client-transform","name":"Find Patient","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json.error ? { error: $json.error } : $json }}","options":{"responseCode":"={{ $json._httpStatus || 200 }}"}},"id":"api-client-response","name":"Respond Client","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[980,300]}
+    ],
+    "connections":{"API Client Webhook":{"main":[[{"node":"Get Patients","type":"main","index":0}]]},"Get Patients":{"main":[[{"node":"Find Patient","type":"main","index":0}]]},"Find Patient":{"main":[[{"node":"Respond Client","type":"main","index":0}]]}},
+    "active":false,"settings":{},"versionId":"maya-api-client-v1","meta":{}
+  },
+  {
+    "name": "Aurevia Practice OS API - Conversations",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"conversations","responseMode":"responseNode","options":{}},"id":"api-conversations-webhook","name":"API Conversations Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Conversations"},"options":{}},"id":"api-conversations-sheet","name":"Get Conversations","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"alwaysOutputData":true,"position":[500,300]},
+      {"parameters":{"jsCode":"const webhook = $('API Conversations Webhook').first();\nconst query = webhook && webhook.json && webhook.json.query ? webhook.json.query : {};\nconst patientId = String(query.patient_id || '').trim();\nconst fields = ['conversation_id','patient_id','timestamp','direction','message','message_id','intent','state_before','state_after','response_time_seconds','delivery_status','campaign_id'];\nconst rows = $input.all().map(item => item.json).filter(row => {\n  if (!patientId) return Boolean(row.conversation_id || row.message);\n  return String(row.patient_id || '').trim() === patientId;\n});\nconst result = rows.map(row => {\n  const obj = {};\n  for (const field of fields) {\n    if (Object.prototype.hasOwnProperty.call(row, field)) obj[field] = row[field];\n  }\n  return obj;\n});\nreturn [{ json: { conversations: result, total_messages: result.length, patient_id: patientId || 'all' } }];"},"id":"api-conversations-transform","name":"Filter Conversations","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json.conversations || [] }}","options":{}},"id":"api-conversations-response","name":"Respond Conversations","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[980,300]}
+    ],
+    "connections":{"API Conversations Webhook":{"main":[[{"node":"Get Conversations","type":"main","index":0}]]},"Get Conversations":{"main":[[{"node":"Filter Conversations","type":"main","index":0}]]},"Filter Conversations":{"main":[[{"node":"Respond Conversations","type":"main","index":0}]]}},
+    "active":true,"settings":{},"versionId":"maya-api-conversations-v1","meta":{}
+  },
+  {
+    "name": "Aurevia Practice OS API - Handoffs",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"handoffs","responseMode":"responseNode","options":{}},"id":"api-handoffs-webhook","name":"API Handoffs Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Human Handoffs"},"options":{}},"id":"api-handoffs-sheet","name":"Get Human Handoffs","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[500,300]},
+      {"parameters":{"jsCode":"return [{json: $input.all().map(item => item.json)}];"},"id":"api-handoffs-transform","name":"Return Handoff Rows","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json }}","options":{}},"id":"api-handoffs-response","name":"Respond Handoffs","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[980,300]}
+    ],
+    "connections":{"API Handoffs Webhook":{"main":[[{"node":"Get Human Handoffs","type":"main","index":0}]]},"Get Human Handoffs":{"main":[[{"node":"Return Handoff Rows","type":"main","index":0}]]},"Return Handoff Rows":{"main":[[{"node":"Respond Handoffs","type":"main","index":0}]]}},
+    "active":false,"settings":{},"versionId":"maya-api-handoffs-v1","meta":{}
+  },
+  {
+    "name": "Aurevia Practice OS API - Offers",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"offers","responseMode":"responseNode","options":{}},"id":"api-offers-webhook","name":"API Offers Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Offers"},"options":{}},"id":"api-offers-sheet","name":"Get Offers","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[500,300]},
+      {"parameters":{"jsCode":"const today = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Kolkata'}).format(new Date());\nconst active = value => String(value ?? '').trim().toUpperCase() === 'YES' || value === true;\nconst rows = $input.all().map(item => item.json).filter(row => active(row.active) && String(row.valid_until ?? '').trim() >= today);\nreturn [{json: rows}];"},"id":"api-offers-transform","name":"Filter Current Offers","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json }}","options":{}},"id":"api-offers-response","name":"Respond Offers","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[980,300]}
+    ],
+    "connections":{"API Offers Webhook":{"main":[[{"node":"Get Offers","type":"main","index":0}]]},"Get Offers":{"main":[[{"node":"Filter Current Offers","type":"main","index":0}]]},"Filter Current Offers":{"main":[[{"node":"Respond Offers","type":"main","index":0}]]}},
+    "active":false,"settings":{},"versionId":"maya-api-offers-v1","meta":{}
+  },
+  {
+    "name": "Aurevia Practice OS API - Config",
+    "nodes": [
+      {"parameters":{"httpMethod":"GET","path":"config","responseMode":"responseNode","options":{}},"id":"api-config-webhook","name":"API Config Webhook","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[240,300]},
+      {"parameters":{"resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},"sheetName":{"__rl":true,"mode":"name","value":"Config"},"options":{}},"id":"api-config-sheet","name":"Get Config","type":"n8n-nodes-base.googleSheets","typeVersion":4.5,"position":[500,300]},
+      {"parameters":{"jsCode":"const config = Object.fromEntries($input.all().map(item => [String(item.json.key ?? '').trim(), item.json.value ?? '']).filter(([key]) => key));\nreturn [{json: config}];"},"id":"api-config-transform","name":"Build Config JSON","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},
+      {"parameters":{"respondWith":"json","responseBody":"={{ $json }}","options":{}},"id":"api-config-response","name":"Respond Config","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[980,300]}
+    ],
+    "connections":{"API Config Webhook":{"main":[[{"node":"Get Config","type":"main","index":0}]]},"Get Config":{"main":[[{"node":"Build Config JSON","type":"main","index":0}]]},"Build Config JSON":{"main":[[{"node":"Respond Config","type":"main","index":0}]]}},
+    "active":false,"settings":{},"versionId":"maya-api-config-v1","meta":{}
+  }
+]

@@ -1,0 +1,379 @@
+{
+  "name": "API-Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "dashboard",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        -288
+      ],
+      "id": "89996c56-4410-438e-9e3a-459d3646b658",
+      "name": "Webhook",
+      "webhookId": "6bfd7db0-ae48-421c-b4da-3c4501f57168"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 890285130,
+          "mode": "list",
+          "cachedResultName": "Patients",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=890285130"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        -384
+      ],
+      "id": "9ab479ef-0bb5-4467-a696-f9c99af69729",
+      "name": "Patient",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 960433626,
+          "mode": "list",
+          "cachedResultName": "Conversations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=960433626"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        -576
+      ],
+      "id": "3d97bf3e-66f7-4652-95ca-eb31ce9afbb1",
+      "name": "Conversations",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 300272866,
+          "mode": "list",
+          "cachedResultName": "Human Handoffs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=300272866"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        -192
+      ],
+      "id": "0cfdf43e-4c5e-4526-8770-03aa7cc711fd",
+      "name": "Human Handoffs",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1764513723,
+          "mode": "list",
+          "cachedResultName": "Offers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=1764513723"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        0
+      ],
+      "id": "6a9e83cb-d2bb-4972-90a4-d86d99d131fc",
+      "name": "Offers",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const patients = $input.all().map(item => item.json);\n\nconst totalPatients = patients.length;\n\nconst inactivePatients = patients.filter(\n  p => Number(p.days_inactive || 0) >= 60\n).length;\n\nconst contactedPatients = patients.filter(\n  p => String(p.conversation_state || '').trim().toUpperCase() === 'CONTACTED'\n).length;\n\nreturn [\n  {\n    json: {\n      source: 'patients',\n      stats: {\n        total_patients: totalPatients,\n        inactive_patients: inactivePatients,\n        contacted_patients: contactedPatients\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -384
+      ],
+      "id": "fe8b0605-cabd-49dd-8623-92960604dfd4",
+      "name": "Patient stats"
+    },
+    {
+      "parameters": {
+        "jsCode": "const offers = $input.all().map(item => item.json);\n\nconst activeOffers = offers.filter(offer =>\n  String(offer.active || \"\").trim().toUpperCase() === \"YES\"\n).length;\n\nreturn [\n  {\n    json: {\n      source: \"offers\",\n      stats: {\n        active_offers: activeOffers\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        0
+      ],
+      "id": "fd981543-95ba-4ff2-8e4b-b03c72d75998",
+      "name": "Offers stats"
+    },
+    {
+      "parameters": {
+        "jsCode": "const conversations = $input.all().map(item => item.json);\n\nconst activeConversations = conversations.filter(\n  c => c.status === \"ACTIVE\" || c.conversation_state === \"ACTIVE\"\n).length;\n\nreturn [\n  {\n    json: {\n      source: \"conversations\",\n      stats: {\n        active_conversations: activeConversations\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -576
+      ],
+      "id": "1e0a96e2-6a42-4bb5-8739-0ccaa20f62b5",
+      "name": "Conversation stats"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        688,
+        -320
+      ],
+      "id": "b8bb5e7b-e145-4f46-89fd-bc49ef8d012a",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const handoffs = $input.all().map(item => item.json);\n\nconst pendingHandoffs = handoffs.filter(\n  h => h.status === \"OPEN\" || h.status === \"PENDING\"\n).length;\n\nreturn [\n  {\n    json: {\n      source: \"handoffs\",\n      stats: {\n        pending_handoffs: pendingHandoffs\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -192
+      ],
+      "id": "8a705d45-0f5e-4768-9b16-c694e4e0971a",
+      "name": "Handoff stats"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all();\n\nconst dashboard = {\n  success: true,\n  stats: {\n    total_patients: 0,\n    inactive_patients: 0,\n    contacted_patients: 0,\n    active_conversations: 0,\n    pending_handoffs: 0,\n    active_offers: 0\n  }\n};\n\nfor (const item of results) {\n  const source = item.json.source;\n  const stats = item.json.stats || {};\n\n  if (source === \"patients\") {\n    dashboard.stats.total_patients = stats.total_patients || 0;\n    dashboard.stats.inactive_patients = stats.inactive_patients || 0;\n    dashboard.stats.contacted_patients = stats.contacted_patients || 0;\n  }\n\n  if (source === \"conversations\") {\n    dashboard.stats.active_conversations =\n      stats.active_conversations || 0;\n  }\n\n  if (source === \"handoffs\") {\n    dashboard.stats.pending_handoffs =\n      stats.pending_handoffs || 0;\n  }\n\n  if (source === \"offers\") {\n    dashboard.stats.active_offers =\n      stats.active_offers || 0;\n  }\n}\n\nreturn [\n  {\n    json: dashboard\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        -288
+      ],
+      "id": "ff9163c4-783f-430b-8798-24bf7a2861a6",
+      "name": "Build Dash Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Conversations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Human Handoffs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Offers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Patient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patient": {
+      "main": [
+        [
+          {
+            "node": "Patient stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversations": {
+      "main": [
+        [
+          {
+            "node": "Conversation stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Handoffs": {
+      "main": [
+        [
+          {
+            "node": "Handoff stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offers": {
+      "main": [
+        [
+          {
+            "node": "Offers stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patient stats": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation stats": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Offers stats": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Handoff stats": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build Dash Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a121bb63-0aa3-496e-b19f-da583db402f4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "Vh3Bs2iUZOkzV76y",
+  "tags": []
+}

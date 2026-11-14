@@ -1,0 +1,542 @@
+{
+  "name": "PATCH patients",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "PATCH",
+        "path": "patient",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        16
+      ],
+      "id": "11f1ae3b-f942-498b-874a-db84a4ce2360",
+      "name": "Webhook",
+      "notes": "PATCH /patient. Requires patient_id and permits only approved non-clinical CRM fields. Credentials and gateway authentication must be configured outside this export.",
+      "webhookId": "de763ac9-3ca2-4f6b-8fd5-835f1cf5d6c3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\n\nconst patientId = String(body.patient_id || '').trim();\n\nif (!patientId) {\n  return [\n    {\n      json: {\n        success: false,\n        valid: false,\n        error: 'patient_id is required'\n      }\n    }\n  ];\n}\n\nconst allowedFields = [\n  'first_name',\n  'last_name',\n  'phone',\n  'email',\n  'preferred_channel',\n  'opt_out'\n];\n\nconst updates = {};\n\nfor (const field of allowedFields) {\n  if (body[field] !== undefined) {\n    updates[field] = body[field];\n  }\n}\n\nif (Object.keys(updates).length === 0) {\n  return [\n    {\n      json: {\n        success: false,\n        valid: false,\n        error: 'No valid fields provided for update'\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      success: true,\n      valid: true,\n      patient_id: patientId,\n      updates\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        16
+      ],
+      "id": "1a55aab8-837f-448e-91d2-c865c926d83f",
+      "name": "Validate Patients update"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8a9f9330-c81f-49db-a596-efe123a9f8ba",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        16
+      ],
+      "id": "86efbf10-65c2-4c16-af8d-ffa7bc79b28e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        112
+      ],
+      "id": "9fd1a08d-25d3-4cb7-8e9e-ae816267aab1",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 890285130,
+          "mode": "list",
+          "cachedResultName": "Patients",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=890285130"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "patient_id",
+              "lookupValue": "={{ $json.patient_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        -80
+      ],
+      "id": "41adaa5e-a019-447d-89b6-e74447d977d7",
+      "name": "Find Patients",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\n\nif (rows.length === 0) {\n  return [\n    {\n      json: {\n        found: false,\n        error: \"Patient not found\"\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      found: true,\n      patient: rows[0].json\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -80
+      ],
+      "id": "1e6bcc71-4fc3-4d44-8662-0c93c005b27e",
+      "name": "Check Patient"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1d5e26f2-017e-498d-b614-bd717dc47965",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        -80
+      ],
+      "id": "7329dea5-81f8-4661-8660-9bd50c567333",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": false,\n  \"found\": false,\n  \"error\": \"Patient not found\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1344,
+        16
+      ],
+      "id": "b42a4c37-423f-4849-9ee6-e793de40ad5d",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 890285130,
+          "mode": "list",
+          "cachedResultName": "Patients",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=890285130"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "patient_id": "={{ $json.patient.patient_id }}",
+            "first_name": "={{ $('Webhook').first().json.body.first_name ?? $json.patient.first_name }}",
+            "last_name": "={{ $('Webhook').first().json.body.last_name ?? $json.patient.last_name }}",
+            "phone": "={{ $('Webhook').first().json.body.phone ?? $json.patient.phone }}",
+            "email": "={{ $('Webhook').first().json.body.email ?? $json.patient.email }}",
+            "preferred_channel": "={{ $('Webhook').first().json.body.preferred_channel ?? $json.patient.preferred_channel }}",
+            "opt_out": "={{ $('Webhook').first().json.body.opt_out ?? $json.patient.opt_out }}"
+          },
+          "matchingColumns": [
+            "patient_id"
+          ],
+          "schema": [
+            {
+              "id": "patient_id",
+              "displayName": "patient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_name",
+              "displayName": "last_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_treatment",
+              "displayName": "last_treatment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_visit",
+              "displayName": "last_visit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "days_inactive",
+              "displayName": "days_inactive",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "preferred_channel",
+              "displayName": "preferred_channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reactivation_eligible",
+              "displayName": "reactivation_eligible",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "conversation_state",
+              "displayName": "conversation_state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_message",
+              "displayName": "last_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_intent",
+              "displayName": "last_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "booking_status",
+              "displayName": "booking_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "opt_out",
+              "displayName": "opt_out",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        -176
+      ],
+      "id": "8d7840a0-6d4f-4a3a-bfd9-98f2f70b3a2f",
+      "name": "Update row in sheet",
+      "notes": "Matches by patient_id and updates only the allowlisted fields. Keep row 1 headers stable; do not use row numbers as identity.",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $('Check Patient').first().json;\nconst body = $('Webhook').first().json.body || {};\n\nconst allowedFields = [\n  'first_name',\n  'last_name',\n  'phone',\n  'email',\n  'preferred_channel',\n  'opt_out'\n];\n\nconst updatedFields = Object.keys(body)\n  .filter((field) => allowedFields.includes(field));\n\nreturn [{\n  json: {\n    success: true,\n    message: 'Patient updated successfully',\n    patient_id: result.patient.patient_id,\n    updated_fields: updatedFields\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        -176
+      ],
+      "id": "4114b33e-8c32-41ce-b805-21e59b58dc05",
+      "name": "Build Response",
+      "notes": "Returns the exact patient_id and updated field names. It does not claim clinical or booking changes."
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1792,
+        -176
+      ],
+      "id": "9fc1ad44-9c5f-48ec-84c3-4c0b6825fac8",
+      "name": "Respond to Webhook2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Patients update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Patients update": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Find Patients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Patients": {
+      "main": [
+        [
+          {
+            "node": "Check Patient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Patient": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3ad363d2-ae68-442b-9d7c-2ee931a28d0e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "8X0ynaeFotnBQRQq",
+  "tags": []
+}

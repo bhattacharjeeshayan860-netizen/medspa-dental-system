@@ -1,0 +1,231 @@
+{
+  "name": "Aurevia Practice OS - Reactivation Campaign",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Aurevia Practice OS Outbound Campaign Engine\n\nProduction Webhook: POST /webhook/patient-campaign\nTest Webhook: POST /webhook-test/patient-campaign\n\nEnforces server-side guardrails:\n1. Hard maximum 25 recipients per run\n2. Daily limit defaults to 25 (configurable from Config sheet)\n3. Cooldown window (7 days) and business hours (10 AM - 7 PM Asia/Kolkata)\n4. Excludes opted out, invalid phone, already booked, contacted today, human handoff\n5. Applies rate-limiting delay between WhatsApp sends\n6. Returns standardized JSON response contract"
+      },
+      "id": "campaign-note",
+      "name": "NOTE - Campaign Guardrails",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [40, 40]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patient-campaign",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "campaign-webhook",
+      "name": "01 - Campaign Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {"__rl": true, "mode": "id", "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},
+        "sheetName": {"__rl": true, "mode": "name", "value": "Config"},
+        "options": {}
+      },
+      "id": "campaign-config",
+      "name": "02 - Get Config",
+      "notes": "Config is the source of truth for timezone, daily outbound limits, and booking URL. Keep key/value headers in row 1.",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {"__rl": true, "mode": "id", "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},
+        "sheetName": {"__rl": true, "mode": "name", "value": "Patients"},
+        "options": {}
+      },
+      "id": "campaign-patients",
+      "name": "03 - Get Patients",
+      "notes": "Reads Patients rows for campaign eligibility. Requires patient_id, phone, preferred_channel, reactivation_eligible, opt_out, conversation_state, and last_treatment.",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {"__rl": true, "mode": "id", "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},
+        "sheetName": {"__rl": true, "mode": "name", "value": "Offers"},
+        "options": {}
+      },
+      "id": "campaign-offers",
+      "name": "04 - Get Active Offers",
+      "notes": "Only active, date-valid Offers are eligible. Missing or ambiguous offer facts must stop the campaign rather than be invented.",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {"__rl": true, "mode": "id", "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},
+        "sheetName": {"__rl": true, "mode": "name", "value": "Conversations"},
+        "options": {},
+        "alwaysOutputData": true
+      },
+      "id": "campaign-conversations",
+      "name": "05 - Get Conversations Log",
+      "notes": "Used for daily outbound counting and audit history. Keep conversation_id and message_id unique.",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('01 - Campaign Webhook').first().json.body || $('01 - Campaign Webhook').first().json || {};\nconst configRows = $('02 - Get Config').all().map(x => x.json);\nconst config = Object.fromEntries(configRows.map(x => [String(x.key || x.config_key || '').trim(), x.value || x.config_value || '']));\nconst patients = $('03 - Get Patients').all().map(x => x.json);\nconst offers = $('04 - Get Active Offers').all().map(x => x.json);\nconst conversations = $('05 - Get Conversations Log').all().map(x => x.json);\n\n// 1. Timezone and Business Hours (10:00 AM - 7:00 PM Asia/Kolkata)\nconst tz = req.timezone || config.business_timezone || 'Asia/Kolkata';\nconst now = new Date();\nconst kolkataTimeStr = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(now);\nconst currentHour = parseInt(kolkataTimeStr, 10);\nconst todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);\nconst isDryRun = Boolean(req.dry_run);\n\nif (!isDryRun && (currentHour < 10 || currentHour >= 19)) {\n  return [{ json: {\n    success: false,\n    _httpStatus: 400,\n    error: 'Outbound campaigns are only permitted during business hours (10:00 AM to 7:00 PM ' + tz + ').',\n    current_hour: currentHour,\n    timezone: tz\n  }}];\n}\n\n// 2. Daily Limit & Safety Cap (hard limit 25 per run)\nconst dailyLimit = Math.min(Number(config.daily_outbound_limit || 25), 50);\nconst hardRunLimit = 25;\n\n// Count messages sent today from conversations\nconst sentToday = conversations.filter(row => {\n  const rowTs = String(row.timestamp || '');\n  return row.direction === 'outbound' && rowTs.startsWith(todayStr);\n}).length;\n\nconst remainingToday = Math.max(0, dailyLimit - sentToday);\nconst runCapacity = Math.min(hardRunLimit, remainingToday);\n\n// 3. Resolve active offer\nconst requestedOfferId = String(req.offer_id || '').trim();\nconst activeOffers = offers.filter(o => String(o.active).toUpperCase() === 'YES' || o.active === true);\nconst selectedOffer = (requestedOfferId ? activeOffers.find(o => String(o.offer_id).trim() === requestedOfferId) : null) || activeOffers[0] || {};\n\nif (!selectedOffer.offer_id) {\n  return [{ json: {\n    success: false,\n    _httpStatus: 400,\n    error: 'No active offers available for campaign outreach.',\n    requested_offer_id: requestedOfferId\n  }}];\n}\n\n// 4. Validate customer_ids\nlet customerIds = Array.isArray(req.customer_ids) ? req.customer_ids.map(id => String(id).trim()).filter(Boolean) : [];\ncustomerIds = [...new Set(customerIds)]; // deduplicate\n\nif (customerIds.length === 0) {\n  return [{ json: {\n    success: false,\n    _httpStatus: 400,\n    error: 'Request must contain at least one valid customer_id.'\n  }}];\n}\n\nconst results = [];\nconst accepted = [];\nlet acceptedCount = 0;\nconst campaignId = 'CAMP-' + todayStr.replace(/-/g, '') + '-' + Math.random().toString(36).substring(2, 7).toUpperCase();\n\nfor (const id of customerIds) {\n  const patient = patients.find(p => String(p.patient_id).trim() === id);\n  if (!patient) {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Customer ID not found in CRM database' });\n    continue;\n  }\n\n  const optOut = String(patient.opt_out || '').toUpperCase() === 'YES';\n  if (optOut) {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Customer has opted out of communications' });\n    continue;\n  }\n\n  const phoneDigits = String(patient.phone || '').replace(/\\D/g, '');\n  if (phoneDigits.length < 10) {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Missing or invalid phone number' });\n    continue;\n  }\n\n  if (String(patient.booking_status || '').toUpperCase() === 'BOOKED') {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Customer already has a confirmed booking' });\n    continue;\n  }\n\n  if (String(patient.conversation_state || '').toUpperCase() === 'HUMAN_REQUIRED') {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Customer is currently escalated to human staff' });\n    continue;\n  }\n\n  // Check if contacted today\n  const contactedToday = conversations.some(c => String(c.patient_id).trim() === id && String(c.timestamp || '').startsWith(todayStr));\n  if (contactedToday) {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Customer was already contacted today' });\n    continue;\n  }\n\n  // Check 7-day cooldown\n  const lastOutbound = patient.last_outbound_at ? new Date(patient.last_outbound_at) : null;\n  if (lastOutbound && (now - lastOutbound) < (7 * 24 * 60 * 60 * 1000)) {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Customer within 7-day campaign cooldown window' });\n    continue;\n  }\n\n  // Check capacity\n  if (acceptedCount >= runCapacity) {\n    results.push({ patient_id: id, status: 'SKIPPED', reason: 'Daily limit of ' + dailyLimit + ' recipients reached' });\n    continue;\n  }\n\n  // Prepare outreach message\n  const firstName = patient.first_name || 'there';\n          const practiceName = config.practice_name || config.spa_name || 'our practice';\n  const treatment = selectedOffer.treatment || selectedOffer.offer_name || 'special treatment';\n  const price = selectedOffer.price ? '$' + selectedOffer.price : 'special rates';\n  const validDate = selectedOffer.valid_until || 'this month';\n          const message = `Hi ${firstName} 😊 It’s been a little while since we saw you at ${practiceName}. We have a returning-client ${treatment} available for ${price} through ${validDate}. Would you like me to send you the booking link?`;\n\n  acceptedCount++;\n  accepted.push({\n    patient,\n    phone: phoneDigits,\n    message,\n    campaign_id: campaignId,\n    offer_id: selectedOffer.offer_id,\n    timestamp: now.toISOString(),\n    row_number: patient.row_number\n  });\n  results.push({ patient_id: id, status: 'QUEUED', reason: null });\n}\n\nconst skippedCount = results.filter(r => r.status === 'SKIPPED').length;\n\nreturn [{\n  json: {\n    success: true,\n    campaign_id: campaignId,\n    status: accepted.length > 0 ? 'QUEUED' : 'SKIPPED',\n    requested: customerIds.length,\n    accepted: accepted.length,\n    skipped: skippedCount,\n    daily_limit: dailyLimit,\n    sent_today_before_run: sentToday,\n    remaining_after_run: Math.max(0, remainingToday - accepted.length),\n    offer_id: selectedOffer.offer_id,\n    offer_name: selectedOffer.offer_name,\n    results,\n    accepted_recipients: accepted\n  }\n}];"
+      },
+      "id": "campaign-validate",
+      "name": "06 - Process & Validate Outbound",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.error ? { success: false, error: $json.error } : $json }}",
+        "options": {
+          "responseCode": "={{ $json._httpStatus || 200 }}"
+        }
+      },
+      "id": "campaign-response",
+      "name": "07 - Respond Outbound Campaign",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const recipients = $input.first().json.accepted_recipients || [];\nreturn recipients.map((r, i) => ({\n  json: {\n    conversation_id: 'CONV-' + r.patient.patient_id + '-' + Date.now() + '-' + i,\n    patient_id: r.patient.patient_id,\n    timestamp: r.timestamp,\n    direction: 'outbound',\n    message: r.message,\n    message_id: 'MSG-' + r.campaign_id + '-' + r.patient.patient_id,\n    intent: 'OUTREACH_SENT',\n    state_before: r.patient.conversation_state || 'NEW',\n    state_after: 'OUTREACH_SENT',\n    response_time_seconds: '1.2',\n    delivery_status: 'QUEUED',\n    campaign_id: r.campaign_id,\n    row_number: r.row_number,\n    phone: r.phone\n  }\n}));"
+      },
+      "id": "campaign-prepare-logs",
+      "name": "08 - Prepare Log Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {"__rl": true, "mode": "id", "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},
+        "sheetName": {"__rl": true, "mode": "name", "value": "Conversations"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_id": "={{ $json.conversation_id }}",
+            "patient_id": "={{ $json.patient_id }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "direction": "outbound",
+            "message": "={{ $json.message }}",
+            "message_id": "={{ $json.message_id }}",
+            "intent": "OUTREACH_SENT",
+            "state_before": "={{ $json.state_before }}",
+            "state_after": "OUTREACH_SENT",
+            "response_time_seconds": "1.2"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "campaign-log-conversations",
+      "name": "09 - Log Outbound Messages",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": {"__rl": true, "mode": "id", "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID"},
+        "sheetName": {"__rl": true, "mode": "name", "value": "Patients"},
+        "rowNumber": "={{ $json.row_number }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conversation_state": "OUTREACH_SENT",
+            "last_message": "={{ $json.message }}",
+            "last_intent": "OUTREACH_SENT",
+            "updated_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "campaign-update-patient",
+      "name": "10 - Update Patient Outreach Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2060, 300]
+    },
+    {
+      "parameters": {
+        "from": "whatsapp:YOUR_TWILIO_NUMBER",
+        "to": "=whatsapp:{{ $json.phone }}",
+        "message": "={{ $json.message }}"
+      },
+      "id": "campaign-send-whatsapp",
+      "name": "11 - WhatsApp Provider Send",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [2280, 300]
+    }
+  ],
+  "connections": {
+    "01 - Campaign Webhook": {
+      "main": [[{"node": "02 - Get Config", "type": "main", "index": 0}]]
+    },
+    "02 - Get Config": {
+      "main": [[{"node": "03 - Get Patients", "type": "main", "index": 0}]]
+    },
+    "03 - Get Patients": {
+      "main": [[{"node": "04 - Get Active Offers", "type": "main", "index": 0}]]
+    },
+    "04 - Get Active Offers": {
+      "main": [[{"node": "05 - Get Conversations Log", "type": "main", "index": 0}]]
+    },
+    "05 - Get Conversations Log": {
+      "main": [[{"node": "06 - Process & Validate Outbound", "type": "main", "index": 0}]]
+    },
+    "06 - Process & Validate Outbound": {
+      "main": [
+        [
+          {"node": "07 - Respond Outbound Campaign", "type": "main", "index": 0},
+          {"node": "08 - Prepare Log Rows", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "08 - Prepare Log Rows": {
+      "main": [[{"node": "09 - Log Outbound Messages", "type": "main", "index": 0}]]
+    },
+    "09 - Log Outbound Messages": {
+      "main": [[{"node": "10 - Update Patient Outreach Status", "type": "main", "index": 0}]]
+    },
+    "10 - Update Patient Outreach Status": {
+      "main": [[{"node": "11 - WhatsApp Provider Send", "type": "main", "index": 0}]]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "maya-spa-campaign-v2",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

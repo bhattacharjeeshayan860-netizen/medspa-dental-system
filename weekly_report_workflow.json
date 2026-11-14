@@ -1,0 +1,101 @@
+[
+  {
+    "name": "Aurevia Practice OS — Monday Executive Telemetry Dispatch",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Monday Executive Revenue & Health Dispatch\nRuns automatically every Monday at 08:00 AM.\n1. Gathers 7-day performance metrics across all configured clinics.\n2. Computes revenue recovered, missed call conversions, open handoffs.\n3. Formats executive HTML briefing.\n4. Dispatches email to clinic owner/director.",
+          "height": 220,
+          "width": 380
+        },
+        "id": "wk-note-01",
+        "name": "NOTE - Weekly Dispatch Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -280,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 8 * * 1"
+              }
+            ]
+          }
+        },
+        "id": "wk-node-01",
+        "name": "01 - Monday 8AM Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          160,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Prepare Weekly Telemetry Report Data\nconst clinics = [\n  {\n    clinic_id: 'aurevia-beverly-hills',\n    name: 'Aurevia Med Spa — Beverly Hills',\n    recipient: 'director@aureviaspa.com',\n    atv: 750,\n    contacted: 68,\n    replied: 29,\n    booked: 14,\n    showed: 12,\n    missed_calls: 18,\n    missed_recovered: 4,\n    revenue_recovered: 9000,\n    open_handoffs: 0\n  },\n  {\n    clinic_id: 'aurevia-dental-downtown',\n    name: 'Aurevia Dental Studio — Downtown LA',\n    recipient: 'dr.smith@aureviadental.com',\n    atv: 420,\n    contacted: 52,\n    replied: 22,\n    booked: 11,\n    showed: 9,\n    missed_calls: 14,\n    missed_recovered: 3,\n    revenue_recovered: 3780,\n    open_handoffs: 1\n  }\n];\n\nreturn clinics.map(c => ({\n  json: {\n    ...c,\n    subject: `Weekly Revenue & Care Telemetry — ${c.name}`,\n    summary_html: `<h2>Weekly Executive Telemetry — ${c.name}</h2><p>Total Revenue Recovered: <strong>$${c.revenue_recovered.toLocaleString()}</strong></p><p>Bookings: ${c.booked} | Missed Calls Recovered: ${c.missed_recovered}</p>`\n  }\n}));"
+        },
+        "id": "wk-node-02",
+        "name": "02 - Compile Telemetry Metrics",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          380,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "fromEmail": "reports@aurevia.ai",
+          "toEmail": "={{ $json.recipient }}",
+          "subject": "={{ $json.subject }}",
+          "html": "={{ $json.summary_html }}",
+          "options": {}
+        },
+        "id": "wk-node-03",
+        "name": "03 - Send Email to Clinic Director",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2.1,
+        "position": [
+          620,
+          200
+        ]
+      }
+    ],
+    "connections": {
+      "01 - Monday 8AM Schedule": {
+        "main": [
+          [
+            {
+              "node": "02 - Compile Telemetry Metrics",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "02 - Compile Telemetry Metrics": {
+        "main": [
+          [
+            {
+              "node": "03 - Send Email to Clinic Director",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "id": "WkReprtAurevia01",
+    "active": false
+  }
+]

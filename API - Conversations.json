@@ -1,0 +1,139 @@
+{
+  "name": "API - Conversations",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "conversations",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7b19a98b-d775-4e6d-bb54-1ae1c22d11a2",
+      "name": "Webhook",
+      "webhookId": "37af5d80-6005-4f27-add8-1eb67da840d6"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\n\nconst conversations = rows\n  .map(item => item.json)\n  .filter(row => row && row.conversation_id);\n\nconst patientId =\n  conversations.length > 0\n    ? conversations[0].patient_id\n    : null;\n\nreturn [\n  {\n    json: {\n      success: true,\n      patient_id: patientId,\n      conversations: conversations,\n      total_messages: conversations.length\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "739d6555-1a1b-49b8-920f-19fa2ff9eb01",
+      "name": "Code in JavaScript",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "6446e1f8-ac51-4f95-8a46-262fd6b48755",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 960433626,
+          "mode": "list",
+          "cachedResultName": "Conversations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=960433626"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "patient_id",
+              "lookupValue": "={{ $json.query.patient_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "d61fd542-a57b-42ad-ac63-139d4198892b",
+      "name": "Get rows for conversations",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get rows for conversations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get rows for conversations": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0ec2c7fc-a617-4512-b5ba-5beeb2fe1bd5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "vBXRQ8iOPa3iqZlz",
+  "tags": []
+}

@@ -1,0 +1,96 @@
+[
+  {
+    "name": "Aurevia Practice OS — System Error & Reliability Trigger",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Practice OS Error Monitoring & Alerting\nTriggered automatically whenever any workflow in the practice instance fails.\nExtracts:\n- Workflow Name & ID\n- Execution ID & Error Message\n- Clinic Context\n- Timestamp & Stack Trace\nDispatches urgent alert to Staff Slack / WhatsApp / Email webhook.",
+          "height": 220,
+          "width": 380
+        },
+        "id": "err-note-01",
+        "name": "NOTE - Error Trigger Guardrails",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -280,
+          100
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "err-node-01",
+        "name": "01 - Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          160,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Format structured error diagnostics\nconst errorData = $json.execution?.error || {};\nconst workflow = $json.workflow || {};\nconst execution = $json.execution || {};\n\nconst workflowName = workflow.name || 'Unknown Practice Workflow';\nconst executionId = execution.id || 'N/A';\nconst timestamp = new Date().toISOString();\nconst errorMessage = errorData.message || 'Unknown execution error occurred';\nconst nodeName = errorData.node?.name || 'Unknown Node';\n\nconst alertPayload = {\n  severity: 'CRITICAL',\n  workflow_name: workflowName,\n  execution_id: executionId,\n  node: nodeName,\n  error_message: errorMessage,\n  timestamp,\n  alert_message: `🚨 [AUREVIA ERROR ALERT]\\nWorkflow: ${workflowName}\\nNode: ${nodeName}\\nExecution: ${executionId}\\nError: ${errorMessage}\\nTimestamp: ${timestamp}\\nAction Required: Check n8n execution log immediately.`\n};\n\nreturn [{ json: alertPayload }];"
+        },
+        "id": "err-node-02",
+        "name": "02 - Format Diagnostic Alert",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          380,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://hooks.slack.com/services/DEMO/REDACTED",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"text\": \"{{ $json.alert_message }}\"\n}",
+          "options": {
+            "neverError": true,
+            "timeout": 3000
+          }
+        },
+        "id": "err-node-03",
+        "name": "03 - Dispatch Staff Slack Alert",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          620,
+          200
+        ]
+      }
+    ],
+    "connections": {
+      "01 - Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "02 - Format Diagnostic Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "02 - Format Diagnostic Alert": {
+        "main": [
+          [
+            {
+              "node": "03 - Dispatch Staff Slack Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "id": "ErrTrigAurevia01",
+    "active": false
+  }
+]

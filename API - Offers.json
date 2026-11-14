@@ -1,0 +1,138 @@
+{
+  "name": "API - Offers",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "offers",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "fd56d6ce-02e2-4be5-976e-4ef2d75fc76c",
+      "name": "Webhook",
+      "webhookId": "8b72d16e-5f28-4855-8238-bb1e2ac34224"
+    },
+    {
+      "parameters": {
+        "jsCode": "const offers = $input.all().map(item => item.json);\n\n// Get today's date in India as YYYY-MM-DD\nconst today = new Intl.DateTimeFormat(\"en-CA\", {\n  timeZone: \"Asia/Kolkata\",\n  year: \"numeric\",\n  month: \"2-digit\",\n  day: \"2-digit\"\n}).format(new Date());\n\nconst validOffers = offers.filter(offer => {\n  const active =\n    String(offer.active || \"\").trim().toUpperCase() === \"YES\";\n\n  const validUntil =\n    String(offer.valid_until || \"\").trim();\n\n  // Must be active\n  if (!active) {\n    return false;\n  }\n\n  // Must have an expiry date\n  if (!validUntil) {\n    return false;\n  }\n\n  // Must not be expired\n  return validUntil >= today;\n});\n\nreturn [\n  {\n    json: {\n      success: true,\n      offers: validOffers,\n      total_offers: validOffers.length,\n      checked_on: today\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "0ae51b01-bdca-4107-89f4-93d2982c6c20",
+      "name": "Build Offers Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "dfa1d8f7-74c4-4a96-9c58-b351529f9ad6",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1764513723,
+          "mode": "list",
+          "cachedResultName": "Offers",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=1764513723"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "active",
+              "lookupValue": "YES"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8d022468-034d-4226-b64c-52f8a5d90d08",
+      "name": "Get rows for offers",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get rows for offers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Offers Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get rows for offers": {
+      "main": [
+        [
+          {
+            "node": "Build Offers Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0ad269d8-7b63-476a-b075-d0d2d1ffacb8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "AZWUcx5Z83MO3eXe",
+  "tags": []
+}

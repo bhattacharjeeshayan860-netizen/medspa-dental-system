@@ -1,0 +1,474 @@
+{
+  "name": "PATCH handoff status",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "PATCH",
+        "path": "human-handoff-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ed04c64d-1fce-46b9-ba11-474468bea198",
+      "name": "Webhook",
+      "notes": "PATCH /human-handoff-status. Accepts only OPEN or RESOLVED and matches by unique queue_id.",
+      "webhookId": "924ba02e-2cbf-41ac-bde4-cdf08fd1aa6a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body || {};\n\nconst queueId = String(body.queue_id || '').trim();\nconst status = String(body.status || '').trim().toUpperCase();\n\nif (!queueId) {\n  return [\n    {\n      json: {\n        success: false,\n        error: 'queue_id is required',\n        valid: false\n      }\n    }\n  ];\n}\n\nif (!status) {\n  return [\n    {\n      json: {\n        success: false,\n        error: 'status is required',\n        valid: false\n      }\n    }\n  ];\n}\n\nconst allowedStatuses = [\n  'OPEN',\n  'RESOLVED'\n];\n\nif (!allowedStatuses.includes(status)) {\n  return [\n    {\n      json: {\n        success: false,\n        error: 'Invalid status',\n        allowed_statuses: allowedStatuses,\n        valid: false\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      success: true,\n      valid: true,\n      queue_id: queueId,\n      status: status\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "201607f8-560d-432b-a277-10d9465a7304",
+      "name": "Prepare the patch",
+      "notes": "Validates queue_id and status before any Google Sheets write. Invalid input returns an explicit failure response."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b7c1e728-c386-49ca-838b-5a47047fe3d7",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        464,
+        0
+      ],
+      "id": "f5212830-0b9b-4a82-a47a-2e0cc2feefad",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        112
+      ],
+      "id": "9394879a-63f3-4dc7-98ff-ad779dc7a68a",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 300272866,
+          "mode": "list",
+          "cachedResultName": "Human Handoffs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=300272866"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "queue_id",
+              "lookupValue": "={{ $json.queue_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        688,
+        -96
+      ],
+      "id": "255369f5-1255-4286-8507-5efbb89a666f",
+      "name": "Find Handoff",
+      "notes": "Human Handoffs requires a unique queue_id column and row-1 headers.",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\n\nconst webhookData = $('Webhook').first().json;\nconst body = webhookData.body || {};\n\nconst queueId = String(body.queue_id || '').trim();\nconst newStatus = String(body.status || '').trim().toUpperCase();\n\nif (!queueId || !newStatus) {\n  return [\n    {\n      json: {\n        success: false,\n        valid: false,\n        error: \"queue_id and status are required\"\n      }\n    }\n  ];\n}\n\nif (rows.length === 0) {\n  return [\n    {\n      json: {\n        success: false,\n        valid: false,\n        queue_id: queueId,\n        status: newStatus,\n        error: \"Human handoff not found\"\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      success: true,\n      valid: true,\n      queue_id: queueId,\n      status: newStatus,\n      handoff: rows[0]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        -96
+      ],
+      "id": "14416482-2a7f-43a5-b0d7-f1bcbd788c90",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "60e6bb31-b05b-4be0-86ee-c9ad66c365b1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1136,
+        -96
+      ],
+      "id": "d029658c-0a6c-4d40-a7cb-d876da295b13",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEETS_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Maya Spa — Reactivation CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 300272866,
+          "mode": "list",
+          "cachedResultName": "Human Handoffs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEETS_SPREADSHEET_ID/edit#gid=300272866"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "queue_id": "={{ $json.queue_id }}",
+            "status": "={{ $json.status }}",
+            "resolved_at": "={{ $json.status=='RESOLVED' ? new Date().toISOString() : '' }}",
+            "patient_id": "={{ $json.patient_id }}",
+            "conversation_id": "={{ $json.conversation_id }}",
+            "name": "={{ $json.name }}",
+            "phone": "={{ $json.phone }}",
+            "reason": "={{ $json.reason }}",
+            "last_message": "={{ $json.last_message }}",
+            "intent": "={{ $json.intent }}",
+            "created_at": "={{ $json.created_at }}",
+            "assigned_to": "={{ $json.assigned_to }}"
+          },
+          "matchingColumns": [
+            "queue_id"
+          ],
+          "schema": [
+            {
+              "id": "queue_id",
+              "displayName": "queue_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "patient_id",
+              "displayName": "patient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "last_message",
+              "displayName": "last_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "intent",
+              "displayName": "intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "resolved_at",
+              "displayName": "resolved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "assigned_to",
+              "displayName": "assigned_to",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        -192
+      ],
+      "id": "4945fd19-443f-4a3d-9815-f06f72d23e31",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "azMMr1oMBWYHx36H",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "b78c79ea-0e22-4e7b-97a8-b5a9176e7e8b",
+      "name": "handoff Not Found"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare the patch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare the patch": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Find Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Handoff": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "handoff Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "be7d19be-1184-452c-88b3-ed0a5ef683e9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f825b922facf93c4e23edf030bd8816c06980608bf03ce7e5ceaed2a36ce4a63"
+  },
+  "nodeGroups": [],
+  "id": "G6kcgwmFf62Hkb47",
+  "tags": []
+}
