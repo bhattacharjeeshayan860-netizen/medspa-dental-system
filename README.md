@@ -1,125 +1,98 @@
 # Aurevia Practice OS
 
-**A clinic follow-up and reactivation workspace for med spa, dermatology, and dental teams.**
+**Patient follow-up, messaging, and staff review in one workspace.**
 
-Aurevia brings overdue follow-up, approved outreach, incoming replies, booking links, and staff review into one visible workflow. The aim is to help a practice team act on the right follow-up without losing context across spreadsheets, messages, and call logs.
+Aurevia is for med spa, dermatology, and dental teams that want a clearer way to follow up with clients. It brings the client list, campaigns, replies, missed calls, and staff handoffs together.
 
-> **Project status:** This repository contains a React/Vite application and n8n workflow templates. The current integration documentation uses Google Sheets. A VPS deployment with a production database is a future target, not a stack provisioned by this repository. Do not connect real patient data until the production, privacy, security, and compliance work described below is complete.
+> **Current state:** This repository contains a React/Vite app and n8n workflow templates. The documented data source is Google Sheets. A VPS and production database are planned, but are not included here. Use the synthetic preview until a production data path and its safeguards are in place.
 
-## What the product does
+## The workflow
 
-1. **Find follow-up gaps.** Review an audience that meets the clinic's configured reactivation criteria.
-2. **Prepare approved outreach.** Use clinic-approved offers and booking links rather than inventing prices or availability.
-3. **Keep conversations visible.** Track outreach, replies, booking intent, and handoffs in the practice workspace.
-4. **Bring staff into the loop.** Route clinical or sensitive questions for human review; honor opt-outs and configured contact limits.
-5. **See operational activity.** Review audience, outreach, bookings, and staff follow-up in the dashboard.
+1. **Review who is due.** Check the client list and the configured eligibility rules.
+2. **Prepare a follow-up.** Select an approved offer and message before launching a campaign.
+3. **Handle the reply.** Keep booking interest visible, honor opt-outs, and send clinical or sensitive questions to staff.
+4. **Recover missed calls.** Check quiet hours and contact rules before a configured text-back.
 
-The product supports operational follow-up; it is not a clinical decision system and does not promise a specific number of bookings or revenue.
+The app helps coordinate practice operations. It does not provide clinical advice or guarantee bookings.
 
-## Product preview
+## Screens from the app
 
-The dashboard screenshot uses the built-in synthetic preview dataset. It is not a live clinic account or evidence of production messaging.
+These are screenshots of the current interface. The app preview uses sample records; live-connected screens may show empty results. They are not evidence of production messaging or customer outcomes.
+Each image is kept at its original pixel size and will scale down to fit a smaller screen.
 
-![Aurevia Practice OS dashboard in synthetic preview mode](docs/assets/workspace-overview.png)
+### Landing page
 
-The conversation illustrations below are presentation assets. They contain synthetic content and are labeled as mockups; they are not customer conversations.
+<p><img src="docs/assets/landing-page-app.png" width="1116" alt="Aurevia landing page with an overview of the follow-up workflow"></p>
 
-![Illustrative follow-up chat mockup](docs/assets/chat-follow-up-illustration.png)
+### Practice overview
 
-![Illustrative staff-review chat mockup](docs/assets/chat-staff-review-illustration.png)
+<p><img src="docs/assets/workspace-overview.png" width="1280" alt="Practice overview in synthetic preview mode"></p>
 
-## Who it is for
+### Client list and campaigns
 
-- Independent med spas and dermatology practices with an existing, permissioned client list.
-- Private dental practices that want a clearer recall and follow-up process.
-- Practice teams that can review sensitive replies and own their consent, messaging, and escalation policies.
+<p><img src="docs/assets/clients-page.png" width="1219" alt="Client list with synthetic client records"></p>
 
-The intended first step is a limited, staff-supervised clinic pilot using synthetic data, followed by a reviewed integration with the clinic's own systems.
+<p><img src="docs/assets/campaigns-page.png" width="1339" alt="Outbound campaign setup and safety checks"></p>
 
-## Current capabilities
+### Missed-call recovery
 
-- Practice overview, client list, conversations, offers, campaigns, missed-call recovery, and a human review queue.
-- A synthetic preview mode for product walkthroughs without a live n8n connection.
-- n8n workflow exports for inbound replies, outbound campaigns, missed calls, read endpoints, handoff updates, and error notifications.
-- Google Sheets-oriented data contracts documented in [N8N_INTEGRATION.md](N8N_INTEGRATION.md).
-- Configurable booking and messaging provider connection points. Provider credentials belong in n8n, not in the browser.
-- A pricing page in the app with a setup-plus-subscription model. Messaging, provider usage, and infrastructure are shown as separate costs.
+<p><img src="docs/assets/missed-call-recovery.png" width="1447" alt="Missed-call recovery simulator and audit ledger"></p>
 
-Pricing and pilot terms in the app are working product values, not a signed offer. Confirm the rates, scope, and any outcome-based terms before quoting them to a clinic.
+### Pricing
 
-## How it is built today
+The prices below are the values currently shown in the app. Confirm scope and rates before presenting them as an offer.
 
-```text
-Practice team
-    |
-    v
-React + Vite workspace
-    |
-    v
-n8n webhooks and workflow templates
-    |
-    +--> Google Sheets (current documented data source)
-    +--> Messaging / calendar providers (configure separately)
-```
+<p><img src="docs/assets/pricing-page.png" width="1222" alt="Pricing plans shown in the Aurevia app"></p>
 
-The frontend is a static client application. The checked-in integration guides and n8n exports are Google Sheets-oriented; they are not a database adapter. There is no backend API service, VPS deployment configuration, database schema, or migration set included here.
+### Messages and staff review
 
-### Intended VPS and database direction
+The chat examples follow the supplied message thread, with the name, practice, and treatment details replaced. The staff-review example is retained. None shows a real patient conversation.
 
-The planned deployment can use a VPS and a production database, but that architecture still needs implementation and verification. Before using real clinic data, the project needs a selected database, server-side API/authentication, tenant isolation, migrations, backup and restore procedures, monitoring, and a security/privacy review. Do not put database credentials, provider secrets, or private bearer tokens in `VITE_*` variables: Vite embeds those values in browser assets.
+<p><img src="docs/assets/sample-outreach-message.png" width="851" alt="Synthetic example of an appointment follow-up message"></p>
 
-If browser requests need authentication, put an authenticated server-side gateway or API between the browser and n8n. Keep Google, LLM, messaging, and database credentials in server-side secret storage.
+<p><img src="docs/assets/sample-reply-and-booking.png" width="794" alt="Synthetic conversation showing a reply and booking-link follow-up"></p>
+
+<p><img src="docs/assets/chat-staff-review-illustration.png" width="794" alt="Synthetic staff-review conversation example"></p>
+
+<p><img src="docs/assets/staff-review-queue.png" width="592" alt="Human Queue empty state in the app"></p>
+
+## What is included
+
+- React/Vite workspace for overview, clients, conversations, campaigns, missed calls, offers, and staff review.
+- Synthetic preview data for local walkthroughs.
+- n8n workflow exports for inbound replies, outbound campaigns, missed calls, read endpoints, handoffs, and error notifications.
+- Google Sheets-oriented webhook and data contracts.
+- Configurable booking and messaging provider connection points; provider credentials stay server-side.
+
+See [N8N_INTEGRATION.md](N8N_INTEGRATION.md) for the current webhook contracts and [N8N_READ_API_IMPORT.md](N8N_READ_API_IMPORT.md) for importing read workflows.
 
 ## Run locally
 
-Use the synthetic preview mode for development and demonstrations.
+Install dependencies, copy `.env.example` to `.env`, leave `VITE_DEMO_MODE=true`, then start the app:
 
 ```bash
 npm ci
-```
-
-Copy `.env.example` to `.env`, keep `VITE_DEMO_MODE=true`, and start the application:
-
-```bash
 npm run dev
 ```
 
-Useful checks:
+Run the checks:
 
 ```bash
 npm test
 npm run build
 node scripts/validate_workflows.js
-node scripts/demo_missed_call.js
 ```
 
-The workflow demo scripts do not activate n8n workflows or prove that a live provider is configured. For n8n setup and webhook examples, read [DEPLOYMENT.md](DEPLOYMENT.md) and [N8N_READ_API_IMPORT.md](N8N_READ_API_IMPORT.md).
+For n8n configuration notes and webhook examples, see [DEPLOYMENT.md](DEPLOYMENT.md). Static workflow validation does not test a live n8n instance or provider.
 
-## Before a live clinic pilot
+## Before using real clinic data
 
-This repository is not, by itself, a production-ready healthcare data environment. Complete and verify these items with the clinic and its qualified advisers:
+The planned VPS/database deployment needs more than a static frontend and workflow exports. Choose and implement the database, server-side API and authentication, tenant separation, secret storage, backups, and monitoring. Review consent, retention, access, messaging rules, and vendor agreements with the clinic and its qualified advisers before enabling live outreach.
 
-- Replace the current Google Sheets template path with the selected production database, or explicitly approve a secured Sheets-based pilot.
-- Add server-side authentication and authorization, tenant boundaries, secure secret management, and least-privilege provider access.
-- Confirm consent, opt-out handling, retention, access logging, deletion, backups, and restore procedures.
-- Review every message template, offer, booking link, quiet-hour rule, and escalation path with the practice.
-- Complete vendor agreements and independent legal/privacy review for applicable healthcare, messaging, and consumer-protection requirements.
-- Test with synthetic data first, then validate the exact production workflows and provider callbacks before enabling sends.
+All `VITE_*` settings are visible in browser assets. Do not put database passwords, provider credentials, or private bearer tokens in them. The current workflow templates use Google Sheets; they are not a production database adapter.
 
-No HIPAA, TCPA, clinical, revenue, uptime, or booking outcome guarantee is made by this repository. A clinic must determine its own legal and regulatory obligations before any live use.
+No HIPAA, TCPA, clinical, revenue, uptime, or booking guarantee is made by this repository.
 
-## Project structure
+## License
 
-| Path | Purpose |
-| --- | --- |
-| `src/` | React application, pages, state, and integration clients |
-| `test/` | Automated regression tests |
-| `scripts/` | Workflow validation and local demo utilities |
-| `*.json` workflow exports | n8n templates; credentials and clinic-specific spreadsheet IDs must be configured after import |
-| `DEPLOYMENT.md` | Frontend, n8n, and pilot deployment notes |
-| `N8N_INTEGRATION.md` | Webhook payloads, response shapes, and current Sheets-oriented schema |
-| `N8N_READ_API_IMPORT.md` | Read-workflow import and verification steps |
-
-## License and use
-
-No license file is currently included. Until a license is added, do not assume the source is licensed for redistribution or commercial reuse. The README and screenshots describe the project; they do not replace implementation, security, privacy, or legal review.
+There is no license file in this repository. Do not assume the source is licensed for redistribution or commercial reuse.
